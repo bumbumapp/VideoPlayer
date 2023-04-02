@@ -18,7 +18,9 @@ import android.content.pm.ResolveInfo;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.database.Cursor;
+import android.graphics.Bitmap;
 import android.media.AudioManager;
+import android.media.MediaMetadataRetriever;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
@@ -40,6 +42,7 @@ import android.widget.Toast;
 import androidx.annotation.RequiresApi;
 import androidx.documentfile.provider.DocumentFile;
 
+import com.arthenica.ffmpegkit.BuildConfig;
 import com.arthenica.ffmpegkit.Chapter;
 import com.arthenica.ffmpegkit.FFmpegKitConfig;
 import com.arthenica.ffmpegkit.FFprobeKit;
@@ -55,17 +58,36 @@ import java.io.File;
 import java.io.InputStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
+import java.text.DecimalFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.TimeUnit;
 
 class Utils {
 
     public static final String FEATURE_FIRE_TV = "amazon.hardware.fire_tv";
-
     public static final String[] supportedExtensionsVideo = new String[] { "3gp", "avi", "m4v", "mkv", "mov", "mp4", "ts", "webm" };
     public static final String[] supportedExtensionsSubtitle = new String[] { "srt", "ssa", "ass", "vtt", "ttml", "dfxp", "xml" };
-
+    static String resoluntionResult=null;
+    static String filename=null;
+    static String location=null;
+    static String date=null;
+    static String format=null;
+    static String size=null;
+    static String duration=null;
+    static String resolutionWidth=null;
+    static String resolutionHeight=null;
+    static String resolution=null;
+    static String bitrate=null;
+    static String haveVideo=null;
+    static String haveAudio=null;
+    static String framecount=null;
+    static ArrayList<Uri>nextesUri=new ArrayList<>();
+    final int REQUEST_PERMISSION_STORAGE = 0;
+    public static Bitmap frame=null;
     public static final String[] supportedMimeTypesVideo = new String[] {
             // Local mime types on Android:
             MimeTypes.VIDEO_MATROSKA, // .mkv
@@ -146,33 +168,104 @@ class Utils {
         }
     }
 
-    public static String getFileName(Context context, Uri uri) {
+
+    public static ArrayList<String> getFileName(Context context, Uri uri) {
+        ArrayList<String>filefolderNames=new ArrayList<>();
         String result = null;
+
+
         try {
             if (ContentResolver.SCHEME_CONTENT.equals(uri.getScheme())) {
-                try (Cursor cursor = context.getContentResolver().query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+                try (Cursor cursor = context.getContentResolver().query(uri, new String[]{OpenableColumns.DISPLAY_NAME,OpenableColumns.SIZE}, null, null, null)) {
                     if (cursor != null && cursor.moveToFirst()) {
                         final int columnIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                        final int columnIndex1 = cursor.getColumnIndex(OpenableColumns.SIZE);
+
                         if (columnIndex > -1)
                             result = cursor.getString(columnIndex);
+                        size=cursor.getString(columnIndex1);
+                        try {
+                            MediaMetadataRetriever mRetriever = new MediaMetadataRetriever();
+
+                            mRetriever.setDataSource(context,uri);
+                            resolutionWidth=mRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH);
+                            resolutionHeight=mRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT);
+                            format=mRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_MIMETYPE);
+                            bitrate=mRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE);
+                            haveAudio=mRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO);
+                            haveVideo=mRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO);
+                            framecount=mRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_FRAME_COUNT);
+                            if (PlayerActivity.player.getCurrentPosition()!=0)
+                                frame = mRetriever.getFrameAtTime(PlayerActivity.player.getCurrentPosition()*1000,MediaMetadataRetriever.OPTION_CLOSEST);
+                            Log.d("Tag","Format: "+mRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_XMP_LENGTH));
+                            resolution=resolutionWidth+"x"+resolutionHeight;
+                            date=formatMediaDate(String.valueOf(mRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DATE)));
+                            duration=formatDuration(Long.parseLong(mRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)));
+                            DecimalFormat df = new DecimalFormat("0.00");
+                            if ((Double.parseDouble(size)/1048576)>=1)
+                                size=String.valueOf(df.format(Double.parseDouble(size)/1048576))+" Mb";
+                            if ((Double.parseDouble(size)/1048576)<1)
+                                size=String.valueOf(df.format(Double.parseDouble(size)/1048576))+" kb";
+
+                        }catch (Exception e){
+                            Log.d("Tag","Re2"+e.getCause());
+                        }
+
                     }
                 }
             }
+            filename=result;
+            location=uri.getPath();
             if (result == null) {
                 result = uri.getPath();
+
+
                 int cut = result.lastIndexOf('/');
                 if (cut != -1) {
                     result = result.substring(cut + 1);
                 }
             }
             if (result.indexOf(".") > 0)
+
                 result = result.substring(0, result.lastIndexOf("."));
+//                path_recent=uri.getPath();
+//                            path_recent=path_recent.substring(0,path_recent.lastIndexOf('/'));
+//                path_recent=path_recent.substring(path_recent.lastIndexOf('/'),path_recent.length()-1);
+
         } catch (Exception e) {
-            e.printStackTrace();
+            Log.d("Tag","Res"+e.getMessage());
         }
-        return result;
+        filefolderNames.add(result);
+        filefolderNames.add(filename);
+        return filefolderNames;
     }
 
+
+
+    static String formatDuration(long duration) {
+        long minutes = TimeUnit.MINUTES.convert(duration, TimeUnit.MILLISECONDS);
+        long seconds = TimeUnit.SECONDS.convert(duration, TimeUnit.MILLISECONDS)
+                - minutes * TimeUnit.SECONDS.convert(1, TimeUnit.MINUTES);
+
+        return String.format("%02d:%02d", minutes, seconds);
+    }
+    public static String formatMediaDate(String date){
+        String formattedDate = "";
+        try {
+            Date inputDate = new SimpleDateFormat("yyyyMMdd'T'HHmmss", Locale.getDefault()).parse(date);
+            formattedDate = new SimpleDateFormat("dd MMMM yyyy", Locale.getDefault()).format(inputDate);
+        }
+        catch (Exception e){
+            Log.w("TAG", "error parsing date: ", e);
+            try {
+                Date inputDate = new SimpleDateFormat("yyyy MM dd", Locale.getDefault()).parse(date);
+                formattedDate = new SimpleDateFormat("dd MMMM yyyy", Locale.getDefault()).format(inputDate);
+            } catch (Exception ex) {
+                Log.e("TAG", "error parsing date: ", ex);
+            }
+        }
+        return formattedDate;
+    }
     public static boolean isVolumeMax(final AudioManager audioManager) {
         return audioManager.getStreamVolume(AudioManager.STREAM_MUSIC) == audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
     }
@@ -276,9 +369,9 @@ class Utils {
     public static void setButtonEnabled(final Context context, final ImageButton button, final boolean enabled) {
         button.setEnabled(enabled);
         button.setAlpha(enabled ?
-                        (float) context.getResources().getInteger(R.integer.exo_media_button_opacity_percentage_enabled) / 100 :
-                        (float) context.getResources().getInteger(R.integer.exo_media_button_opacity_percentage_disabled) / 100
-                );
+                (float) context.getResources().getInteger(R.integer.exo_media_button_opacity_percentage_enabled) / 100 :
+                (float) context.getResources().getInteger(R.integer.exo_media_button_opacity_percentage_disabled) / 100
+        );
     }
 
     public static void showText(final CustomStyledPlayerView playerView, final String text, final long timeout) {
@@ -604,7 +697,7 @@ class Utils {
         if (initialUri != null && (new File(initialUri.getSchemeSpecificPart())).exists()) {
             startPath = initialUri.getSchemeSpecificPart();
         } else {
-            startPath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES).getAbsolutePath();
+            startPath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM).getAbsolutePath();
         }
 
         final String[] suffixes = (video ? supportedExtensionsVideo : supportedExtensionsSubtitle);
@@ -648,17 +741,17 @@ class Utils {
 
     public static boolean isPiPSupported(Context context) {
         PackageManager packageManager = context.getPackageManager();
-        if (BuildConfig.FLAVOR_distribution.equals("amazon") && packageManager.hasSystemFeature(FEATURE_FIRE_TV)) {
-            return false;
-        }
+//        if (BuildConfig.FLAVOR_distribution.equals("amazon") && packageManager.hasSystemFeature(FEATURE_FIRE_TV)) {
+//            return false;
+//        }
         return Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE);
     }
 
-    public static Uri getMoviesFolderUri() {
+    public static Uri getMoviesFolderUri(Context context) {
         Uri uri = null;
         if (Build.VERSION.SDK_INT >= 26) {
             final String authority = "com.android.externalstorage.documents";
-            final String documentId = "primary:" + Environment.DIRECTORY_MOVIES;
+            final String documentId = "primary:" + Environment.DIRECTORY_DCIM;
             uri = DocumentsContract.buildDocumentUri(authority, documentId);
         }
         return uri;

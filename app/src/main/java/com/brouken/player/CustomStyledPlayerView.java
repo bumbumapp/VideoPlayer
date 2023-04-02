@@ -90,15 +90,15 @@ public class CustomStyledPlayerView extends StyledPlayerView implements GestureD
 
         mScaleDetector = new ScaleGestureDetector(context, this);
 
-        if (!Utils.isTvBox(getContext())) {
-            exoErrorMessage.setOnClickListener(v -> {
-                if (PlayerActivity.locked) {
-                    PlayerActivity.locked = false;
-                    Utils.showText(CustomStyledPlayerView.this, "", MESSAGE_TIMEOUT_LONG);
-                    setIconLock(false);
-                }
-            });
-        }
+//        if (!Utils.isTvBox(getContext())) {
+//            exoErrorMessage.setOnClickListener(v -> {
+//                if (PlayerActivity.locked) {
+//                    PlayerActivity.locked = false;
+//                    Utils.showText(CustomStyledPlayerView.this, "", MESSAGE_TIMEOUT_LONG);
+//                    setIconLock(false);
+//                }
+//            });
+//        }
     }
 
     public void clearIcon() {
@@ -411,6 +411,8 @@ public class CustomStyledPlayerView extends StyledPlayerView implements GestureD
 
     public void setIconLock(boolean locked) {
         exoErrorMessage.setCompoundDrawablesWithIntrinsicBounds(locked ? R.drawable.ic_lock_24dp : R.drawable.ic_lock_open_24dp, 0, 0, 0);
+        PlayerActivity.checkLocked();
+
     }
 
     public void setScale(final float scale) {
